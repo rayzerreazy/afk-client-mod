@@ -1,36 +1,23 @@
 {
   "schemaVersion": 1,
-  "id": "addon-template",
+  "id": "afk-client",
   "version": "${version}",
-  "name": "Ray's Addon",
-  "description": "An addon template for Meteor Client addons.",
+  "name": "AFK Client",
+  "description": "A small standalone client with its own GUI: Spawner Protect and Bone Sell.",
   "authors": [
-    "seasnail"
+    "Ray"
   ],
-  "contact": {
-    "sources": "https://github.com/MeteorDevelopment/meteor-addon-template"
-  },
-  "icon": "assets/template/icon.png",
+  "license": "CC0-1.0",
   "environment": "client",
   "entrypoints": {
-    "meteor": [
-      "com.example.addon.AddonTemplate"
+    "client": [
+      "com.afk.client.AfkClient"
     ]
   },
-  "mixins": [
-    "addon-template.mixins.json"
-  ],
-  "custom": {
-    "meteor-client:color": "225,25,25",
-    "modmenu": {
-      "parent": {
-        "id": "meteor-client"
-      }
-    }
-  },
   "depends": {
+    "fabricloader": ">=0.18.0",
+    "minecraft": "~1.21.11",
     "java": ">=21",
-    "minecraft": ["${mc_version}"],
-    "meteor-client": "*"
+    "fabric-api": "*"
   }
 }
