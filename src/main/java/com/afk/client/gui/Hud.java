@@ -34,7 +34,7 @@ public final class Hud {
         String title = AfkClient.NAME;
         String version = "v" + AfkClient.VERSION;
         int w = font.getWidth(title) + font.getWidth(version) + 18;
-        context.fill(4, 4, 4 + w, 20, 0xA0101018);
+        Galaxy.draw(context, 4, 4, 4 + w, 20);
         context.fill(4, 4, 6, 20, Theme.ACCENT);
         context.drawTextWithShadow(font, title, 10, 8, Theme.ACCENT);
         context.drawTextWithShadow(font, version, 14 + font.getWidth(title), 8, Theme.DIM);
@@ -49,7 +49,7 @@ public final class Hud {
         for (String name : names) {
             int tw = font.getWidth(name);
             int x = screenW - tw - 10;
-            context.fill(x - 4, y, screenW - 4, y + 12, 0xA0101018);
+            Galaxy.draw(context, x - 4, y, screenW - 4, y + 12);
             context.fill(screenW - 6, y, screenW - 4, y + 12, Theme.ACCENT_2);
             context.drawTextWithShadow(font, name, x, y + 2, Theme.TEXT);
             y += 13;

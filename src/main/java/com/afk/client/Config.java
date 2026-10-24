@@ -33,7 +33,10 @@ public final class Config {
         try {
             JsonObject root = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
 
-            if (root.has("guiKey")) ModuleManager.guiKey = root.get("guiKey").getAsInt();
+            // (older configs saved the old default menu key - only trust it from version 2 on)
+            if (root.has("version") && root.get("version").getAsInt() >= 2 && root.has("guiKey")) {
+                ModuleManager.guiKey = root.get("guiKey").getAsInt();
+            }
 
             JsonObject modules = root.has("modules") ? root.getAsJsonObject("modules") : new JsonObject();
             for (Module module : ModuleManager.MODULES) {
@@ -58,6 +61,7 @@ public final class Config {
     public static void save() {
         try {
             JsonObject root = new JsonObject();
+            root.addProperty("version", 2);
             root.addProperty("guiKey", ModuleManager.guiKey);
 
             JsonObject modules = new JsonObject();

@@ -18,7 +18,12 @@ public final class ModuleManager {
     public static final List<Module> MODULES = new ArrayList<>();
 
     /** Key that opens the GUI. */
-    public static int guiKey = GLFW.GLFW_KEY_RIGHT_SHIFT;
+    public static int guiKey = GLFW.GLFW_KEY_RIGHT_CONTROL;
+
+    /** Set by the /afk command; the menu opens on the next tick (after the chat screen has closed). */
+    public static volatile boolean openGuiRequested;
+
+    private static boolean hinted;
 
     private static final Map<Integer, Boolean> previous = new HashMap<>();
 
@@ -48,7 +53,16 @@ public final class ModuleManager {
         if (mc.getWindow() == null) return;
         boolean canUseKeys = mc.currentScreen == null && mc.player != null;
 
-        if (edge(guiKey) && canUseKeys) mc.setScreen(new ClickGui());
+        if (mc.player != null && !hinted) {
+            hinted = true;
+            ChatUtil.info("Press " + com.afk.client.util.Keys.name(guiKey) + " or type /afk to open the menu.");
+        }
+
+        if (openGuiRequested && canUseKeys) {
+            openGuiRequested = false;
+            openGui();
+        }
+        if (edge(guiKey) && canUseKeys) openGui();
 
         for (Module m : new ArrayList<>(MODULES)) {
             if (m.bind.isSet() && edge(m.bind.key) && canUseKeys) m.toggle();
@@ -59,6 +73,15 @@ public final class ModuleManager {
                     ks.run();
                 }
             }
+        }
+    }
+
+    private static void openGui() {
+        try {
+            MinecraftClient.getInstance().setScreen(new ClickGui());
+        } catch (Throwable t) {
+            t.printStackTrace();
+            ChatUtil.error("Couldn't open the menu: " + t);
         }
     }
 

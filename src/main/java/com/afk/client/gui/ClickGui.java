@@ -97,12 +97,13 @@ public class ClickGui extends Screen {
 
         hint = "";
 
-        ctx.fill(0, 0, width, height, 0x80000000);
-        ctx.fill(x0, y0, x0 + w, y0 + h, Theme.BACKGROUND);
+        ctx.fillGradient(0, 0, width, height, 0xB0040418, 0xB0160A32);
+        Galaxy.stars(ctx, 0, 0, width, height, 0.35f);
+        Galaxy.draw(ctx, x0, y0, x0 + w, y0 + h);
 
         // title bar
-        ctx.fillGradient(x0, y0, x0 + w, y0 + TITLE_H, Theme.TITLE_BAR, 0xFF111120);
-        ctx.fill(x0, y0 + TITLE_H - 2, x0 + w, y0 + TITLE_H, Theme.ACCENT);
+        ctx.fillGradient(x0, y0, x0 + w, y0 + TITLE_H, Theme.TITLE_TOP, Theme.TITLE_BOTTOM);
+        ctx.fill(x0, y0 + TITLE_H - 2, x0 + w, y0 + TITLE_H, Theme.ACCENT_2);
         ctx.drawText(mc.textRenderer, AfkClient.NAME, x0 + 10, y0 + 9, Theme.ACCENT, true);
         ctx.drawText(mc.textRenderer, "v" + AfkClient.VERSION, x0 + 12 + mc.textRenderer.getWidth(AfkClient.NAME), y0 + 9, Theme.DIM, false);
 
@@ -136,7 +137,7 @@ public class ClickGui extends Screen {
             boolean sel = i == selected;
             ctx.fill(sbX + 6, ey, sbX + SIDEBAR_W - 6, ey + 22, sel ? Theme.ROW_HOVER : (hover ? Theme.ROW : Theme.SIDEBAR));
             if (sel) ctx.fill(sbX + 6, ey, sbX + 8, ey + 22, Theme.ACCENT);
-            ctx.fill(sbX + SIDEBAR_W - 18, ey + 8, sbX + SIDEBAR_W - 12, ey + 14, m.isActive() ? Theme.GOOD : 0xFF3A3A4E);
+            ctx.fill(sbX + SIDEBAR_W - 18, ey + 8, sbX + SIDEBAR_W - 12, ey + 14, m.isActive() ? Theme.GOOD : Theme.OFF);
             ctx.drawText(mc.textRenderer, prettify(m.name), sbX + 14, ey + 7, sel ? Theme.TEXT : Theme.DIM, false);
             if (hover && clicked) {
                 selected = i;
@@ -240,7 +241,7 @@ public class ClickGui extends Screen {
         if (s instanceof BoolSetting b) {
             ctx.drawText(mc.textRenderer, clip(label, w - 34), x + 8, y + 10, Theme.TEXT, false);
             int bx = x + w - 24;
-            ctx.fill(bx, y + 8, bx + 16, y + 20, b.get() ? Theme.ACCENT_DARK : 0xFF3A3A4E);
+            ctx.fill(bx, y + 8, bx + 16, y + 20, b.get() ? Theme.ACCENT_DARK : Theme.OFF);
             int knob = b.get() ? bx + 10 : bx + 2;
             ctx.fill(knob, y + 10, knob + 4, y + 18, b.get() ? Theme.ACCENT : Theme.DIM);
             if (hover && clicked) b.set(!b.get());
@@ -270,7 +271,7 @@ public class ClickGui extends Screen {
             String keyText = listening == k ? "Press a key..." : k.get().toString();
             int kw = mc.textRenderer.getWidth(keyText) + 12;
             int kx = x + w - kw - 6;
-            ctx.fill(kx, y + 6, kx + kw, y + 22, listening == k ? Theme.ACCENT_DARK : 0xFF2F2F45);
+            ctx.fill(kx, y + 6, kx + kw, y + 22, listening == k ? Theme.ACCENT_DARK : Theme.KEY_BUTTON);
             ctx.drawText(mc.textRenderer, keyText, kx + 6, y + 10, Theme.TEXT, false);
             if (hover && clicked) {
                 listening = k;
@@ -289,7 +290,7 @@ public class ClickGui extends Screen {
         int barW = w - 16;
         int barY = y + 19;
         double t = Math.max(0, Math.min(1, fraction));
-        ctx.fill(barX, barY, barX + barW, barY + 4, 0xFF34344A);
+        ctx.fill(barX, barY, barX + barW, barY + 4, Theme.TRACK);
         ctx.fill(barX, barY, barX + (int) (barW * t), barY + 4, Theme.ACCENT);
         int knobX = barX + (int) (barW * t);
         ctx.fill(knobX - 2, barY - 2, knobX + 2, barY + 6, Theme.TEXT);

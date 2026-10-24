@@ -3,6 +3,8 @@ package com.afk.client;
 import com.afk.client.gui.Hud;
 import com.afk.client.module.ModuleManager;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 
@@ -20,6 +22,13 @@ public class AfkClient implements ClientModInitializer {
 
         // The on-screen display (watermark + list of active modules).
         Hud.register();
+
+        // Type /afk in chat to open the menu.
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
+            dispatcher.register(ClientCommandManager.literal("afk").executes(context -> {
+                ModuleManager.openGuiRequested = true;
+                return 1;
+            })));
 
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> Config.save());
     }
