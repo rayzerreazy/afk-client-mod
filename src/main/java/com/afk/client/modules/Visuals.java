@@ -141,7 +141,7 @@ public class Visuals extends Module {
         List<ParticleEffect> pool;
         switch (style.get()) {
             case "Nebula":
-                pool = List.of(ParticleTypes.PORTAL, ParticleTypes.DRAGON_BREATH, ParticleTypes.WITCH, ParticleTypes.ENCHANT);
+                pool = List.of(ParticleTypes.PORTAL, ParticleTypes.WITCH, ParticleTypes.ENCHANT, ParticleTypes.WITCH);
                 break;
             case "Starlight":
                 pool = List.of(ParticleTypes.END_ROD, ParticleTypes.ENCHANT, ParticleTypes.ELECTRIC_SPARK);
