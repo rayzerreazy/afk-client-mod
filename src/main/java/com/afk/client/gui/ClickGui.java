@@ -10,6 +10,7 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
+import org.lwjgl.glfw.GLFWScrollCallback;
 
 import java.util.HashMap;
 import java.util.List;
@@ -38,10 +39,20 @@ public class ClickGui extends Screen {
 
     private final Map<Integer, Boolean> keyPrev = new HashMap<>();
 
+    // mouse wheel
+    private double scrollDelta;
+    private GLFWScrollCallback previousScroll;
+
     public ClickGui() {
         super(Text.literal(AfkClient.NAME));
         prevMouseDown = mouseDown();
         for (int k = GLFW.GLFW_KEY_SPACE; k <= GLFW.GLFW_KEY_LAST; k++) keyPrev.put(k, ModuleManager.isDown(k));
+
+        // Listen to the mouse wheel (and pass it on to the game, as before).
+        previousScroll = GLFW.glfwSetScrollCallback(mc.getWindow().getHandle(), (window, dx, dy) -> {
+            scrollDelta += dy;
+            if (previousScroll != null) previousScroll.invoke(window, dx, dy);
+        });
     }
 
     @Override
@@ -51,6 +62,7 @@ public class ClickGui extends Screen {
 
     @Override
     public void removed() {
+        GLFW.glfwSetScrollCallback(mc.getWindow().getHandle(), previousScroll); // give the wheel back to the game
         Config.save();
     }
 
@@ -75,6 +87,12 @@ public class ClickGui extends Screen {
         boolean clicked = down && !prevMouseDown;
         prevMouseDown = down;
         if (!down) dragging = null;
+
+        // mouse wheel: up = content moves down
+        if (scrollDelta != 0) {
+            scroll -= (int) Math.round(scrollDelta * 24);
+            scrollDelta = 0;
+        }
 
         // --- key handling
         if (listening != null || listeningForModuleBind || listeningForGuiKey) {
@@ -260,6 +278,16 @@ public class ClickGui extends Screen {
                     double p = Math.pow(10, d.decimals);
                     d.set(Math.round(v * p) / p);
                 });
+
+        } else if (s instanceof ModeSetting mode) {
+            ctx.drawText(mc.textRenderer, clip(label, w - 90), x + 8, y + 10, Theme.TEXT, false);
+            String text = mode.get();
+            int tw = mc.textRenderer.getWidth(text) + 14;
+            int tx = x + w - tw - 6;
+            ctx.fill(tx, y + 6, tx + tw, y + 22, hover ? Theme.ACCENT_DARK : Theme.KEY_BUTTON);
+            ctx.drawText(mc.textRenderer, text, tx + 7, y + 10, Theme.ACCENT, false);
+            if (hover) hint = s.description + " (click to change)";
+            if (hover && clicked) mode.cycle();
 
         } else if (s instanceof StringSetting str) {
             ctx.drawText(mc.textRenderer, clip(label, w - 12), x + 8, y + 4, Theme.TEXT, false);

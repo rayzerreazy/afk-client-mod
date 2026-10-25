@@ -1,7 +1,10 @@
 package com.afk.client.module;
 
 import com.afk.client.modules.BoneSell;
+import com.afk.client.modules.SkyBox;
 import com.afk.client.modules.SpawnerProtect;
+import com.afk.client.modules.Visuals;
+import com.afk.client.util.AlarmPlayer;
 import com.afk.client.setting.KeybindSetting;
 import com.afk.client.setting.Setting;
 import com.afk.client.gui.ClickGui;
@@ -29,13 +32,24 @@ public final class ModuleManager {
 
     private ModuleManager() { }
 
+    public static <T extends Module> T get(Class<T> type) {
+        for (Module m : MODULES) {
+            if (type.isInstance(m)) return type.cast(m);
+        }
+        return null;
+    }
+
     public static void init() {
         MODULES.add(new SpawnerProtect());
         MODULES.add(new BoneSell());
+        MODULES.add(new Visuals());
+        MODULES.add(new SkyBox());
     }
 
     public static void tick() {
         MinecraftClient mc = MinecraftClient.getInstance();
+
+        AlarmPlayer.tick();
 
         // 1. Run the modules that are on.
         for (Module m : new ArrayList<>(MODULES)) {

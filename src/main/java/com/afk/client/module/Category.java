@@ -1,7 +1,8 @@
 package com.afk.client.module;
 
 public enum Category {
-    AUTOMATION("Automation");
+    AUTOMATION("Automation"),
+    VISUALS("Visuals");
 
     public final String title;
 

@@ -3,6 +3,7 @@ package com.afk.client.modules;
 import com.afk.client.module.Category;
 import com.afk.client.module.Module;
 import com.afk.client.setting.*;
+import com.afk.client.util.AlarmPlayer;
 import com.afk.client.util.BlockUtils;
 import com.afk.client.util.FindItemResult;
 import com.afk.client.util.InvUtils;
@@ -64,13 +65,43 @@ public class SpawnerProtect extends Module {
     private static final int MAX_PACK_ROUNDS = 6;
 
     private final SettingGroup sg = settings.getDefaultGroup();
+    private final SettingGroup sgAlarm = settings.createGroup("Alarm");
+
+    // ---- Alarm
+    private final Setting<String> alarmSound = sgAlarm.add(new ModeSetting.Builder()
+        .name("alarm").description("Which alarm sounds when a player shows up or breaks a spawner. Click to switch (it plays a preview).")
+        .options(AlarmPlayer.NAMES).defaultValue("Bell").onChange(this::previewAlarm).build());
+
+    private final Setting<Integer> alarmVolume = sgAlarm.add(new IntSetting.Builder()
+        .name("alarm-volume").description("How loud the alarm is, in percent.")
+        .defaultValue(100).min(0).max(100).sliderMax(100).build());
+
+    private final Setting<Integer> alarmRepeats = sgAlarm.add(new IntSetting.Builder()
+        .name("alarm-repeats").description("How many times the alarm plays.")
+        .defaultValue(2).min(1).max(10).sliderMax(10).build());
+
+    private final Setting<Boolean> breakAlert = sgAlarm.add(new BoolSetting.Builder()
+        .name("break-alert").description("Sound the alarm when one of your spawners disappears and you didn't mine it - unless a whitelisted player was the one standing next to it.")
+        .defaultValue(true).build());
+
+    private final Setting<Integer> breakRadius = sgAlarm.add(new IntSetting.Builder()
+        .name("break-alert-radius").description("The player closest to the broken spawner (within this many blocks) is treated as the one who broke it.")
+        .defaultValue(10).min(2).max(32).sliderMax(32).visible(breakAlert::get).build());
+
+    private final Setting<Integer> watchRange = sgAlarm.add(new IntSetting.Builder()
+        .name("watch-range").description("How far from you to keep an eye on spawners.")
+        .defaultValue(24).min(8).max(48).sliderMax(48).visible(breakAlert::get).build());
+
+    private final Setting<Keybind> testAlarmKey = sgAlarm.add(new KeybindSetting.Builder()
+        .name("test-alarm-key").description("Press to hear the alarm (the module has to be on).")
+        .defaultValue(Keybind.none()).action(this::previewAlarm).build());
 
     private final Setting<Integer> detectRange = sg.add(new IntSetting.Builder()
         .name("detect-range").description("Range to detect other players. 0 = any loaded player.")
         .defaultValue(64).min(0).sliderMax(128).build());
 
-    private final Setting<String> ignoredNames = sg.add(new StringSetting.Builder()
-        .name("ignored-players").description("Player names that never trigger the module (separate with commas).")
+    private final Setting<String> whitelist = sg.add(new StringSetting.Builder()
+        .name("whitelist").description("Players who never set it off, whether they walk past or break blocks (separate names with commas). Easiest to manage with /afk whitelist add <name>.")
         .defaultValue("").build());
 
     private final Setting<Integer> spawnerRange = sg.add(new IntSetting.Builder()
@@ -188,6 +219,8 @@ public class SpawnerProtect extends Module {
 
     private void reset() {
         state = State.IDLE;
+        watched.clear();
+        lastWatchPos = null;
         resumeState = State.MINING;
         depMode = Dep.ALL;
         ticksActive = waitTicks = actionTimer = noProgressTicks = verifyPasses = lastCount = 0;
@@ -245,11 +278,14 @@ public class SpawnerProtect extends Module {
             PlayerEntity close = findIntruder(panicRange.get());
             if (close != null) {
                 reason = close.getName().getString();
-                beep(SoundEvents.ENTITY_ENDER_DRAGON_GROWL, 1.0f);
+                playAlarm();
                 storeAndLeave("Player " + reason + " is within " + panicRange.get()
                     + " blocks - storing everything and leaving!", true);
             }
         }
+
+        if (state == State.IDLE) breakWatch();
+        else watched.clear();
 
         switch (state) {
             case IDLE -> {
@@ -257,7 +293,7 @@ public class SpawnerProtect extends Module {
                 if (p != null) {
                     reason = p.getName().getString();
                     info("Player detected: " + reason + " - securing spawners.");
-                    beep(SoundEvents.BLOCK_BELL_USE, 0.8f);
+                    playAlarm();
                     state = State.MINING;
                 }
             }
@@ -274,11 +310,125 @@ public class SpawnerProtect extends Module {
         }
     }
 
+    // ---------------------------------------------------------------- whitelist
+
+    public List<String> whitelistNames() {
+        List<String> names = new ArrayList<>();
+        for (String part : whitelist.get().split(",")) {
+            String n = part.trim();
+            if (!n.isEmpty()) names.add(n);
+        }
+        return names;
+    }
+
+    private void saveWhitelist(List<String> names) {
+        whitelist.set(String.join(", ", names));
+    }
+
+    /** Returns false if the name was already on the list. */
+    public boolean whitelistAdd(String name) {
+        List<String> names = whitelistNames();
+        for (String n : names) if (n.equalsIgnoreCase(name)) return false;
+        names.add(name);
+        saveWhitelist(names);
+        return true;
+    }
+
+    /** Returns false if the name wasn't on the list. */
+    public boolean whitelistRemove(String name) {
+        List<String> names = whitelistNames();
+        boolean removed = names.removeIf(n -> n.equalsIgnoreCase(name));
+        if (removed) saveWhitelist(names);
+        return removed;
+    }
+
+    public void whitelistClear() {
+        whitelist.set("");
+    }
+
     private boolean isIgnored(String name) {
-        for (String part : ignoredNames.get().split(",")) {
-            if (part.trim().equalsIgnoreCase(name)) return true;
+        for (String n : whitelistNames()) {
+            if (n.equalsIgnoreCase(name)) return true;
         }
         return false;
+    }
+
+    // ---------------------------------------------------------------- alarm + break watch
+
+    private void playAlarm() {
+        AlarmPlayer.play(alarmSound.get(), alarmVolume.get() / 100f, alarmRepeats.get());
+    }
+
+    /** Plays the chosen alarm once, so you can hear it. */
+    public void previewAlarm() {
+        AlarmPlayer.play(alarmSound.get(), alarmVolume.get() / 100f, 1);
+    }
+
+    private final Set<BlockPos> watched = new HashSet<>();
+    private int watchTimer;
+    private BlockPos lastWatchPos;
+    private Object lastWatchWorld;
+
+    /** While idle: notice when a spawner near you disappears, and say who was next to it. */
+    private void breakWatch() {
+        if (!breakAlert.get()) {
+            watched.clear();
+            return;
+        }
+
+        // A new world or a big jump (teleport, rejoin): start the list fresh so nothing false goes off.
+        BlockPos here = mc.player.getBlockPos();
+        if (mc.world != lastWatchWorld || (lastWatchPos != null && lastWatchPos.getSquaredDistance(here) > 400)) {
+            watched.clear();
+            lastWatchWorld = mc.world;
+            watchTimer = 0;
+        }
+        lastWatchPos = here;
+
+        if (--watchTimer > 0) return;
+        watchTimer = 10;
+
+        List<BlockPos> nowList = findBlocks(watchRange.get(), true);
+        Set<BlockPos> now = new HashSet<>(nowList);
+
+        for (BlockPos p : new ArrayList<>(watched)) {
+            if (now.contains(p)) continue;
+            watched.remove(p);
+
+            // Ignore spawners that just went out of range or whose chunk unloaded.
+            if (!mc.world.getChunkManager().isChunkLoaded(p.getX() >> 4, p.getZ() >> 4)) continue;
+            if (Vec3d.ofCenter(p).distanceTo(mc.player.getEyePos()) > watchRange.get()) continue;
+
+            reportBrokenSpawner(p);
+        }
+        watched.addAll(now);
+    }
+
+    private void reportBrokenSpawner(BlockPos pos) {
+        Vec3d center = Vec3d.ofCenter(pos);
+        PlayerEntity culprit = null;
+        double best = (double) breakRadius.get() * breakRadius.get();
+        for (PlayerEntity p : mc.world.getPlayers()) {
+            if (p == mc.player) continue;
+            double d = p.squaredDistanceTo(center);
+            if (d < best) {
+                best = d;
+                culprit = p;
+            }
+        }
+
+        String where = pos.getX() + " " + pos.getY() + " " + pos.getZ();
+        if (culprit != null) {
+            String name = culprit.getName().getString();
+            if (isIgnored(name)) {
+                info(name + " (whitelisted) removed a spawner at " + where + " - not sounding the alarm.");
+                return;
+            }
+            warning(name + " broke a spawner at " + where + "!");
+        } else {
+            warning("A spawner at " + where + " disappeared (nobody close enough to tell who)!");
+        }
+        playAlarm();
     }
 
     private boolean isWorking() {
