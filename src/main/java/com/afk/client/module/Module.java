@@ -19,10 +19,17 @@ public abstract class Module {
 
     private boolean active;
 
+    /** Small credit shown under the module name in the menu (empty = none). */
+    public String credit = "";
+
     protected Module(Category category, String name, String description) {
         this.category = category;
         this.name = name;
         this.description = description;
+    }
+
+    protected void credit(String text) {
+        this.credit = text;
     }
 
     public boolean isActive() {

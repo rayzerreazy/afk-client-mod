@@ -21,14 +21,12 @@ public class SkyBox extends Module {
     @Override
     public void onActivate() {
         info("Loading the galaxy sky... the game freezes for a few seconds.");
-        on = PackToggle.enable(SKY_PACK_FILE, SKY_PACK_RESOURCE);
+        PackToggle.enableLater(SKY_PACK_FILE, SKY_PACK_RESOURCE, ok -> on = ok);
     }
 
     @Override
     public void onDeactivate() {
-        if (on) {
-            PackToggle.disable(SKY_PACK_FILE);
-            on = false;
-        }
+        PackToggle.disableLater(SKY_PACK_FILE); // harmless if it never got turned on
+        on = false;
     }
 }

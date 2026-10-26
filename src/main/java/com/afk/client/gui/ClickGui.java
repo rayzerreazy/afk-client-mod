@@ -148,15 +148,21 @@ public class ClickGui extends Screen {
 
         List<Module> modules = ModuleManager.MODULES;
         if (selected >= modules.size()) selected = 0;
+        int rowY = sbY + 22;
         for (int i = 0; i < modules.size(); i++) {
             Module m = modules.get(i);
-            int ey = sbY + 22 + i * 26;
-            boolean hover = hit(mouseX, mouseY, sbX + 6, ey, SIDEBAR_W - 12, 22);
+            int rh = m.credit.isEmpty() ? 22 : 32;
+            int ey = rowY;
+            rowY += rh + 4;
+            boolean hover = hit(mouseX, mouseY, sbX + 6, ey, SIDEBAR_W - 12, rh);
             boolean sel = i == selected;
-            ctx.fill(sbX + 6, ey, sbX + SIDEBAR_W - 6, ey + 22, sel ? Theme.ROW_HOVER : (hover ? Theme.ROW : Theme.SIDEBAR));
-            if (sel) ctx.fill(sbX + 6, ey, sbX + 8, ey + 22, Theme.ACCENT);
+            ctx.fill(sbX + 6, ey, sbX + SIDEBAR_W - 6, ey + rh, sel ? Theme.ROW_HOVER : (hover ? Theme.ROW : Theme.SIDEBAR));
+            if (sel) ctx.fill(sbX + 6, ey, sbX + 8, ey + rh, Theme.ACCENT);
             ctx.fill(sbX + SIDEBAR_W - 18, ey + 8, sbX + SIDEBAR_W - 12, ey + 14, m.isActive() ? Theme.GOOD : Theme.OFF);
             ctx.drawText(mc.textRenderer, prettify(m.name), sbX + 14, ey + 7, sel ? Theme.TEXT : Theme.DIM, false);
+            if (!m.credit.isEmpty()) {
+                ctx.drawText(mc.textRenderer, clip(m.credit, SIDEBAR_W - 30), sbX + 14, ey + 20, Theme.ACCENT_2, false);
+            }
             if (hover && clicked) {
                 selected = i;
                 scroll = 0;
@@ -171,6 +177,9 @@ public class ClickGui extends Screen {
         int top = y0 + TITLE_H + 8;
 
         ctx.drawText(mc.textRenderer, prettify(m.name), cx, top, Theme.ACCENT, true);
+        if (!m.credit.isEmpty()) {
+            ctx.drawText(mc.textRenderer, m.credit, cx + mc.textRenderer.getWidth(prettify(m.name)) + 8, top, Theme.ACCENT_2, false);
+        }
         ctx.drawText(mc.textRenderer, clip(m.description, cw - 190), cx, top + 12, Theme.DIM, false);
 
         // ON/OFF button

@@ -209,6 +209,7 @@ public class SpawnerProtect extends Module {
     public SpawnerProtect() {
         super(Category.AUTOMATION, "spawner-protect",
             "Picks up spawners when a player shows up, stashes them in your ender chest, then logs you out.");
+        credit("inspired by Alatic"); // change to "by Alatic" once his code is ported in
     }
 
     @Override

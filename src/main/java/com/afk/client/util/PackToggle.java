@@ -9,7 +9,9 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 
 /**
@@ -17,7 +19,30 @@ import java.util.List;
  * The pack is copied into your resourcepacks folder, then switched on and the game reloads its resources.
  */
 public final class PackToggle {
+    private static final Deque<Runnable> PENDING = new ArrayDeque<>();
+
     private PackToggle() { }
+
+    /**
+     * Reloading resources while the menu is still being drawn can crash the game, so pack changes are queued
+     * and done at the start of the next tick instead (ModuleManager calls tick()).
+     */
+    public static void enableLater(String fileName, String resourcePath, java.util.function.Consumer<Boolean> done) {
+        PENDING.add(() -> {
+            boolean ok = enable(fileName, resourcePath);
+            if (done != null) done.accept(ok);
+        });
+    }
+
+    public static void disableLater(String fileName) {
+        PENDING.add(() -> disable(fileName));
+    }
+
+    /** Run one queued pack change (they are slow, so only one per tick). */
+    public static void tick() {
+        Runnable next = PENDING.poll();
+        if (next != null) next.run();
+    }
 
     public static boolean enable(String fileName, String resourcePath) {
         MinecraftClient mc = MinecraftClient.getInstance();

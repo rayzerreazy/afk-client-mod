@@ -50,6 +50,7 @@ public final class ModuleManager {
         MinecraftClient mc = MinecraftClient.getInstance();
 
         AlarmPlayer.tick();
+        com.afk.client.util.PackToggle.tick();
 
         // 1. Run the modules that are on.
         for (Module m : new ArrayList<>(MODULES)) {

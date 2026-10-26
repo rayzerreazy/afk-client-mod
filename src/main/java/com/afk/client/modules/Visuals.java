@@ -52,6 +52,7 @@ public class Visuals extends Module {
 
     private final Random random = new Random();
     private boolean armorPackOn;
+    private boolean armorPackQueued;
 
     public Visuals() {
         super(Category.VISUALS, "visuals", "Galaxy effects: stars around you, sparkling armor and a star trail.");
@@ -60,15 +61,15 @@ public class Visuals extends Module {
     @Override
     public void onActivate() {
         armorPackOn = false;
+        armorPackQueued = false;
         syncArmorPack();
     }
 
     @Override
     public void onDeactivate() {
-        if (armorPackOn) {
-            PackToggle.disable(ARMOR_PACK_FILE);
-            armorPackOn = false;
-        }
+        PackToggle.disableLater(ARMOR_PACK_FILE); // harmless if it never got turned on
+        armorPackOn = false;
+        armorPackQueued = false;
     }
 
     @Override
@@ -155,12 +156,16 @@ public class Visuals extends Module {
 
     /** Keeps the armor texture pack in step with the setting. */
     private void syncArmorPack() {
-        if (armorTextures.get() && !armorPackOn) {
+        if (armorTextures.get() && !armorPackOn && !armorPackQueued) {
             info("Loading the galaxy armor textures... the game freezes for a few seconds.");
-            armorPackOn = PackToggle.enable(ARMOR_PACK_FILE, ARMOR_PACK_RESOURCE);
+            armorPackQueued = true;
+            PackToggle.enableLater(ARMOR_PACK_FILE, ARMOR_PACK_RESOURCE, ok -> {
+                armorPackOn = ok;
+                armorPackQueued = false;
+            });
         } else if (!armorTextures.get() && armorPackOn) {
-            PackToggle.disable(ARMOR_PACK_FILE);
             armorPackOn = false;
+            PackToggle.disableLater(ARMOR_PACK_FILE);
         }
     }
 }
