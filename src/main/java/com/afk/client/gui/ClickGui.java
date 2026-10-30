@@ -301,7 +301,7 @@ public class ClickGui extends Screen {
         } else if (s instanceof StringSetting str) {
             ctx.drawText(mc.textRenderer, clip(label, w - 12), x + 8, y + 4, Theme.TEXT, false);
             ctx.drawText(mc.textRenderer, clip("\"" + str.get() + "\"", w - 16), x + 8, y + 16, Theme.DIM, false);
-            if (hover) hint = s.description + " (edit it in config/afk-client.json)";
+            if (hover) hint = s.description + " (change it with /afk set " + ModuleManager.MODULES.get(selected).name + " " + s.name + " <value>)";
 
         } else if (s instanceof KeybindSetting k) {
             ctx.drawText(mc.textRenderer, clip(label, w - 90), x + 8, y + 10, Theme.TEXT, false);

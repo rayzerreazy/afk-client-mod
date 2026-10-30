@@ -1,9 +1,9 @@
 package com.afk.client.module;
 
+import com.afk.client.modules.AuctionWatch;
+import com.afk.client.modules.AutoList;
 import com.afk.client.modules.BoneSell;
-import com.afk.client.modules.SkyBox;
 import com.afk.client.modules.SpawnerProtect;
-import com.afk.client.modules.Visuals;
 import com.afk.client.util.AlarmPlayer;
 import com.afk.client.setting.KeybindSetting;
 import com.afk.client.setting.Setting;
@@ -42,15 +42,14 @@ public final class ModuleManager {
     public static void init() {
         MODULES.add(new SpawnerProtect());
         MODULES.add(new BoneSell());
-        MODULES.add(new Visuals());
-        MODULES.add(new SkyBox());
+        MODULES.add(new AuctionWatch());
+        MODULES.add(new AutoList());
     }
 
     public static void tick() {
         MinecraftClient mc = MinecraftClient.getInstance();
 
         AlarmPlayer.tick();
-        com.afk.client.util.PackToggle.tick();
 
         // 1. Run the modules that are on.
         for (Module m : new ArrayList<>(MODULES)) {
