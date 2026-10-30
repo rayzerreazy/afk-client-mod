@@ -11,7 +11,7 @@ import java.util.List;
 
 /** Plays the alarm sounds. Each alarm is a little pattern of vanilla sounds. */
 public final class AlarmPlayer {
-    public static final List<String> NAMES = List.of("Bell", "Siren", "Dragon", "Wither", "Anvil", "Ghast", "Chime", "None");
+    public static final List<String> NAMES = List.of("Bell", "Siren", "Dragon", "Wither", "Anvil", "Ghast", "Chime", "Ding", "None");
 
     private record Step(int delay, SoundEvent sound, float pitch) { }
 
@@ -84,6 +84,8 @@ public final class AlarmPlayer {
                 return new Pattern(50, List.of(
                     new Step(0, SoundEvents.ENTITY_GHAST_SCREAM, 1.0f),
                     new Step(22, SoundEvents.ENTITY_GHAST_SCREAM, 0.8f)));
+            case "ding":
+                return new Pattern(10, List.of(new Step(0, SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP, 1.1f)));
             case "chime":
                 return new Pattern(40, List.of(new Step(0, SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, 1.0f)));
             default:

@@ -10,112 +10,121 @@ import net.minecraft.component.type.LoreComponent;
 import net.minecraft.item.ItemStack;
 import net.minecraft.screen.ScreenHandler;
 import net.minecraft.screen.slot.Slot;
+import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.text.Text;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
- * AH Watch: every so often, searches the auction house for items you expect almost nobody to be selling,
- * and tells you when a few cheap listings show up.
+ * AH Watch: turn it on and it starts. It goes through a built-in list of easy-to-craft items that don't matter much
+ * on DonutSMP, types /ah <item> for each one, reads the listings, and plays a ding when an item has a listing
+ * priced far above what it should be worth (100M or more by default). Then it closes the menu and checks the next item.
  *
- * It only looks and notifies - it never buys anything.
- * Set what to watch with:  /afk set ah-watch items netherite_scrap, elytra
+ * It only looks and notifies - it never buys or lists anything.
  */
 public class AuctionWatch extends Module {
+    /** Common, easy-to-craft items that aren't a big deal in the economy. Edit this list to taste. */
+    private static final String[] DEFAULT_ITEMS = {
+        "end rod", "lantern", "soul lantern", "sea lantern", "campfire", "soul campfire", "composter", "barrel",
+        "lectern", "loom", "smoker", "blast furnace", "stonecutter", "grindstone", "cartography table",
+        "fletching table", "bamboo mosaic", "chiseled bookshelf", "decorated pot", "jukebox", "note block",
+        "scaffolding", "item frame", "glow item frame", "painting", "armor stand", "flower pot", "iron trapdoor",
+        "chain", "prismarine bricks", "dark prismarine", "purpur pillar", "end stone bricks", "polished blackstone bricks",
+        "mud bricks", "packed mud", "cut copper", "lightning rod", "spyglass", "crafter", "dried kelp block", "hay block",
+        "honey block", "slime block", "target", "tinted glass", "beehive", "candle", "bell", "daylight detector",
+        "observer", "dropper", "dispenser", "hopper", "piston", "sticky piston", "redstone lamp", "tripwire hook",
+        "lever", "comparator", "repeater", "rail", "detector rail", "activator rail", "cauldron", "brewing stand",
+        "enchanting table", "anvil", "loom", "bookshelf", "ladder", "bone block", "terracotta", "glazed terracotta",
+        "concrete powder", "stained glass", "calcite", "tuff bricks", "polished tuff", "resin bricks", "pale oak planks"
+    };
+
     private final SettingGroup sg = settings.getDefaultGroup();
-    private final SettingGroup sgAlert = settings.createGroup("Alert");
     private final SettingGroup sgTiming = settings.createGroup("Timing");
+    private final SettingGroup sgAdvanced = settings.createGroup("Advanced");
 
     // ---- General
-    private final Setting<String> items = sg.add(new StringSetting.Builder()
-        .name("items").description("What to search for, separated by commas (whatever you would type after /ah). Change it with /afk set ah-watch items <list>.")
-        .defaultValue("").build());
+    private final Setting<Integer> flagFrom = sg.add(new IntSetting.Builder()
+        .name("flag-from-millions").description("Flag an item when one of its listings costs at least this much, in millions (100 = $100M).")
+        .defaultValue(100).min(1).max(1_000_000).sliderRange(1, 2000).build());
 
-    private final Setting<String> command = sg.add(new StringSetting.Builder()
-        .name("command").description("The command that opens the auction house search, without the slash. The search word is added after it.")
-        .defaultValue("ah").build());
+    private final Setting<Integer> flagUpTo = sg.add(new IntSetting.Builder()
+        .name("flag-up-to-millions").description("Ignore listings above this price, in millions. 0 = no upper limit (so $2B is flagged too).")
+        .defaultValue(0).min(0).max(1_000_000).sliderRange(0, 5000).build());
 
-    private final Setting<String> minPrice = sg.add(new StringSetting.Builder()
-        .name("min-price").description("Cheapest price that counts (you can write 1, 1500, 1.5M ...).")
-        .defaultValue("1").build());
+    private final Setting<Integer> minListings = sg.add(new IntSetting.Builder()
+        .name("listings-needed").description("How many listings in the price range an item needs before it's flagged.")
+        .defaultValue(1).min(1).max(20).sliderMax(5).build());
 
-    private final Setting<String> maxPrice = sg.add(new StringSetting.Builder()
-        .name("max-price").description("Most expensive price that still counts as cheap (for example 10M).")
-        .defaultValue("10M").build());
-
-    private final Setting<Integer> minCheap = sg.add(new IntSetting.Builder()
-        .name("min-cheap-listings").description("Alert when at least this many listings are inside the price range.")
-        .defaultValue(1).min(1).max(50).sliderMax(10).build());
-
-    private final Setting<Integer> maxTotal = sg.add(new IntSetting.Builder()
-        .name("max-total-listings").description("Only alert if the item has at most this many listings in total (you expect almost none). 0 = don't check.")
-        .defaultValue(0).min(0).max(100).sliderMax(20).build());
-
-    private final Setting<String> priceWord = sg.add(new StringSetting.Builder()
-        .name("price-word").description("The word on the price line of a listing's description. Use debug-menu to see what the listings look like.")
-        .defaultValue("price").build());
-
-    // ---- Alert
-    private final Setting<String> alarm = sgAlert.add(new ModeSetting.Builder()
-        .name("alarm").description("The sound to play when something cheap is found.")
-        .options(AlarmPlayer.NAMES).defaultValue("Chime").build());
-
-    private final Setting<Integer> alarmVolume = sgAlert.add(new IntSetting.Builder()
-        .name("alarm-volume").description("Alarm volume in percent.")
+    private final Setting<Integer> dingVolume = sg.add(new IntSetting.Builder()
+        .name("ding-volume").description("Volume of the ding, in percent. 0 = silent (chat message only).")
         .defaultValue(100).min(0).max(100).sliderMax(100).build());
 
-    private final Setting<Integer> alarmRepeats = sgAlert.add(new IntSetting.Builder()
-        .name("alarm-repeats").description("How many times the alarm plays.")
-        .defaultValue(2).min(1).max(10).sliderMax(10).build());
-
-    private final Setting<Integer> realertMinutes = sgAlert.add(new IntSetting.Builder()
-        .name("repeat-alert-minutes").description("If the same cheap listings are still there, remind you after this many minutes.")
-        .defaultValue(5).min(1).max(120).sliderMax(30).build());
-
     // ---- Timing
-    private final Setting<Integer> intervalSeconds = sgTiming.add(new IntSetting.Builder()
-        .name("check-every-seconds").description("How often to go through the whole list.")
-        .defaultValue(45).min(10).max(3600).sliderRange(10, 300).build());
-
-    private final Setting<Integer> itemGapSeconds = sgTiming.add(new IntSetting.Builder()
-        .name("seconds-between-items").description("Pause between two searches (so the server doesn't get spammed).")
-        .defaultValue(4).min(1).max(60).sliderMax(20).build());
+    private final Setting<Integer> gapTicks = sgTiming.add(new IntSetting.Builder()
+        .name("ticks-between-items").description("Pause between two searches. Lower = faster, but too fast can get you kicked. 20 ticks = 1 second.")
+        .defaultValue(30).min(10).max(200).sliderMax(100).build());
 
     private final Setting<Integer> settleTicks = sgTiming.add(new IntSetting.Builder()
-        .name("load-wait-ticks").description("How long to wait after the auction house opens for the listings to appear. 20 ticks = 1 second.")
+        .name("load-wait-ticks").description("How long to wait after the auction house opens for the listings to appear.")
         .defaultValue(12).min(2).max(100).sliderMax(60).build());
 
-    private final Setting<Boolean> debugMenu = sgTiming.add(new BoolSetting.Builder()
-        .name("debug-menu").description("Print what each listing looks like in chat, to help set the price word.")
+    private final Setting<Integer> pauseAfterList = sgTiming.add(new IntSetting.Builder()
+        .name("pause-after-list-seconds").description("How long to rest after going through the whole list, before starting again.")
+        .defaultValue(20).min(1).max(3600).sliderRange(1, 300).build());
+
+    private final Setting<Integer> pages = sgTiming.add(new IntSetting.Builder()
+        .name("pages-to-check").description("How many pages of results to read for each item (1 = just the first page).")
+        .defaultValue(1).min(1).max(5).sliderMax(5).build());
+
+    private final Setting<Integer> realertMinutes = sgTiming.add(new IntSetting.Builder()
+        .name("repeat-alert-minutes").description("If the same expensive listing is still there, remind you after this many minutes.")
+        .defaultValue(10).min(1).max(240).sliderMax(60).build());
+
+    // ---- Advanced
+    private final Setting<String> command = sgAdvanced.add(new StringSetting.Builder()
+        .name("command").description("The command that opens the auction house search, without the slash.")
+        .defaultValue("ah").build());
+
+    private final Setting<String> priceWord = sgAdvanced.add(new StringSetting.Builder()
+        .name("price-word").description("The word on the price line of a listing's description. Use debug-menu to see what listings look like.")
+        .defaultValue("price").build());
+
+    private final Setting<String> extraItems = sgAdvanced.add(new StringSetting.Builder()
+        .name("extra-items").description("More items to check, separated by commas (optional).")
+        .defaultValue("").build());
+
+    private final Setting<Boolean> debugMenu = sgAdvanced.add(new BoolSetting.Builder()
+        .name("debug-menu").description("Print what each listing looks like in chat, to help if prices aren't being read.")
         .defaultValue(false).build());
 
     private enum Step { WAIT, OPENING, READING }
 
-    private record Scan(int listings, int cheap, double cheapest) { }
-
     private Step step = Step.WAIT;
-    private int timer, termIndex, openTicks, settle, readTries;
-    private String lastMessage = "";
+    private int timer, termIndex, openTicks, settle, readTries, page;
+    private int listingsSeen, flaggedSeen;
+    private double highestFlag;
+    private String lastPageSignature = "";
     private final Map<String, String> lastSignature = new HashMap<>();
     private final Map<String, Long> lastTime = new HashMap<>();
 
     public AuctionWatch() {
         super(Category.AUTOMATION, "ah-watch",
-            "Watches the auction house for rarely-listed items and tells you when a few cheap listings appear.");
+            "Checks the auction house for easy-to-craft items listed at silly prices and dings when it finds one.");
     }
 
     @Override
     public void onActivate() {
         step = Step.WAIT;
-        timer = 40;
+        timer = 20;
         termIndex = 0;
-        openTicks = settle = readTries = 0;
-        lastMessage = "";
+        openTicks = settle = readTries = page = 0;
         lastSignature.clear();
         lastTime.clear();
+        info("Watching the auction house: " + terms().size() + " items. Flagging listings of $" + Prices.format(flagFrom.get() * 1e6) + "+.");
     }
 
     @Override
@@ -141,18 +150,12 @@ public class AuctionWatch extends Module {
             timer--;
             return;
         }
-
-        List<String> terms = terms();
-        if (terms.isEmpty()) {
-            say("Nothing to watch yet. Type: /afk set ah-watch items netherite_scrap, elytra");
-            timer = 200;
-            return;
-        }
         if (menuOpen()) { // you're using some menu - wait
             timer = 20;
             return;
         }
 
+        List<String> terms = terms();
         if (termIndex >= terms.size()) termIndex = 0;
         String term = terms.get(termIndex);
 
@@ -165,31 +168,54 @@ public class AuctionWatch extends Module {
         if (menuOpen()) {
             settle = settleTicks.get();
             readTries = 0;
+            page = 0;
+            listingsSeen = 0;
+            flaggedSeen = 0;
+            highestFlag = 0;
+            lastPageSignature = "";
             step = Step.READING;
             return;
         }
         if (++openTicks > 120) {
-            warning("The auction house didn't open for \"" + currentTerm() + "\" - skipping it.");
-            finishTerm();
+            finishTerm(); // it didn't open: just move on
         }
     }
 
     private void reading() {
         if (!menuOpen()) {
-            warning("The auction house closed before I could read it - skipping \"" + currentTerm() + "\".");
             finishTerm();
             return;
         }
         if (settle-- > 0) return;
 
-        Scan scan = scan(readTries == 0);
+        PageScan scan = scanPage(page == 0 && readTries == 0);
+
         // Listings can take a moment to appear: look again a few times before believing "nothing".
-        if (scan.listings() == 0 && ++readTries < 4) {
+        if (scan.listings == 0 && page == 0 && ++readTries < 4) {
             settle = 10;
             return;
         }
 
-        report(currentTerm(), scan);
+        boolean samePage = !lastPageSignature.isEmpty() && lastPageSignature.equals(scan.signature);
+        if (!samePage) {
+            listingsSeen += scan.listings;
+            flaggedSeen += scan.flagged;
+            highestFlag = Math.max(highestFlag, scan.highestFlag);
+            lastPageSignature = scan.signature;
+        }
+
+        // Read another page?
+        if (!samePage && page + 1 < pages.get() && scan.listings > 0) {
+            int next = findNextButton();
+            if (next >= 0) {
+                click(next);
+                page++;
+                settle = settleTicks.get();
+                return;
+            }
+        }
+
+        report(currentTerm());
         mc.player.closeHandledScreen();
         finishTerm();
     }
@@ -199,24 +225,28 @@ public class AuctionWatch extends Module {
         termIndex++;
         if (termIndex >= terms.size()) {
             termIndex = 0;
-            timer = Math.max(itemGapSeconds.get(), intervalSeconds.get()) * 20;
+            timer = pauseAfterList.get() * 20;
         } else {
-            timer = itemGapSeconds.get() * 20;
+            timer = gapTicks.get();
         }
         step = Step.WAIT;
     }
 
     // ---------------------------------------------------------------- reading the listings
 
-    private Scan scan(boolean log) {
-        double min = Prices.parse(minPrice.get());
-        double max = Prices.parse(maxPrice.get());
-        if (min < 0) min = 1;
-        if (max < 0) max = 10_000_000;
+    private static final class PageScan {
+        int listings;
+        int flagged;
+        double highestFlag;
+        String signature = "";
+    }
 
-        int listings = 0;
-        int cheap = 0;
-        double cheapest = Double.MAX_VALUE;
+    private PageScan scanPage(boolean log) {
+        double from = flagFrom.get() * 1e6;
+        double to = flagUpTo.get() > 0 ? flagUpTo.get() * 1e6 : Double.MAX_VALUE;
+
+        PageScan result = new PageScan();
+        StringBuilder signature = new StringBuilder();
         int shown = 0;
 
         ScreenHandler handler = mc.player.currentScreenHandler;
@@ -233,23 +263,26 @@ public class AuctionWatch extends Module {
             }
 
             if (price < 0) continue; // buttons and decorations have no price
-            listings++;
-            if (price >= min && price <= max) {
-                cheap++;
-                cheapest = Math.min(cheapest, price);
+            result.listings++;
+            signature.append((long) price).append(',');
+            if (price >= from && price <= to) {
+                result.flagged++;
+                result.highestFlag = Math.max(result.highestFlag, price);
             }
         }
-        return new Scan(listings, cheap, cheapest == Double.MAX_VALUE ? -1 : cheapest);
+        result.signature = signature.toString();
+        return result;
     }
 
     private double priceOf(ItemStack stack) {
         List<String> lines = loreLines(stack);
-        String word = priceWord.get().trim().toLowerCase();
+        String word = priceWord.get().trim().toLowerCase(Locale.ROOT);
 
         if (!word.isEmpty()) {
             for (String line : lines) {
-                if (line.toLowerCase().contains(word)) {
-                    double p = Prices.parse(line.substring(line.toLowerCase().indexOf(word) + word.length()));
+                String lower = line.toLowerCase(Locale.ROOT);
+                if (lower.contains(word)) {
+                    double p = Prices.parse(line.substring(lower.indexOf(word) + word.length()));
                     if (p >= 0) return p;
                 }
             }
@@ -275,18 +308,30 @@ public class AuctionWatch extends Module {
         return out;
     }
 
+    /** The "next page" button, found by its name. */
+    private int findNextButton() {
+        for (Slot slot : mc.player.currentScreenHandler.slots) {
+            if (slot.inventory == mc.player.getInventory()) continue;
+            ItemStack stack = slot.getStack();
+            if (!stack.isEmpty() && stack.getName().getString().toLowerCase(Locale.ROOT).contains("next")) return slot.id;
+        }
+        return -1;
+    }
+
+    private void click(int slotId) {
+        ScreenHandler handler = mc.player.currentScreenHandler;
+        mc.interactionManager.clickSlot(handler.syncId, slotId, 0, SlotActionType.PICKUP, mc.player);
+    }
+
     // ---------------------------------------------------------------- reporting
 
-    private void report(String term, Scan scan) {
-        boolean totalOk = maxTotal.get() == 0 || scan.listings() <= maxTotal.get();
-        boolean alert = scan.cheap() >= minCheap.get() && totalOk;
-
-        if (!alert) {
-            if (debugMenu.get()) info(term + ": " + scan.listings() + " listed, " + scan.cheap() + " in the price range - no alert.");
+    private void report(String term) {
+        if (flaggedSeen < minListings.get()) {
+            if (debugMenu.get()) info(term + ": " + listingsSeen + " listed, none flagged.");
             return;
         }
 
-        String signature = scan.cheap() + "@" + (long) scan.cheapest();
+        String signature = flaggedSeen + "@" + (long) highestFlag;
         long now = System.currentTimeMillis();
         String previous = lastSignature.get(term);
         Long previousTime = lastTime.get(term);
@@ -297,35 +342,29 @@ public class AuctionWatch extends Module {
         lastSignature.put(term, signature);
         lastTime.put(term, now);
 
-        warning("[AH] " + term + ": " + scan.cheap() + " cheap listing(s), cheapest $" + Prices.format(scan.cheapest())
-            + " (" + scan.listings() + " listed in total)");
-        AlarmPlayer.play(alarm.get(), alarmVolume.get() / 100f, alarmRepeats.get());
+        warning("[AH] " + term + ": listed for $" + Prices.format(highestFlag) + " (" + flaggedSeen + " listing(s) at $"
+            + Prices.format(flagFrom.get() * 1e6) + "+, " + listingsSeen + " total)");
+        AlarmPlayer.play("Ding", dingVolume.get() / 100f, 1);
     }
 
     // ---------------------------------------------------------------- helpers
 
     private List<String> terms() {
         List<String> out = new ArrayList<>();
-        for (String part : items.get().split(",")) {
+        for (String t : DEFAULT_ITEMS) if (!out.contains(t)) out.add(t);
+        for (String part : extraItems.get().split(",")) {
             String t = part.trim();
-            if (!t.isEmpty()) out.add(t);
+            if (!t.isEmpty() && !out.contains(t)) out.add(t);
         }
         return out;
     }
 
     private String currentTerm() {
         List<String> terms = terms();
-        return terms.isEmpty() ? "" : terms.get(Math.min(termIndex, terms.size() - 1));
+        return terms.get(Math.min(termIndex, terms.size() - 1));
     }
 
     private boolean menuOpen() {
         return mc.player.currentScreenHandler != mc.player.playerScreenHandler;
-    }
-
-    private void say(String message) {
-        if (!message.equals(lastMessage)) {
-            lastMessage = message;
-            info(message);
-        }
     }
 }
